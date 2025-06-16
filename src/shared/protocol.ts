@@ -47,6 +47,7 @@ import {
 } from '../types.js';
 import { Transport, TransportSendOptions } from './transport.js';
 import { AuthInfo } from '../server/auth/types.js';
+import { DebugTransport } from './debug-transport.js';
 import { isTerminal, TaskStore, TaskMessageQueue, QueuedMessage, CreateTaskOptions } from '../experimental/tasks/interfaces.js';
 import { getMethodLiteral, parseWithCompat } from '../server/zod-json-schema-compat.js';
 import { ResponseMessage } from './responseMessage.js';
@@ -605,6 +606,17 @@ export abstract class Protocol<SendRequestT extends Request, SendNotificationT e
      * The Protocol object assumes ownership of the Transport, replacing any callbacks that have already been set, and expects that it is the only user of the Transport instance going forward.
      */
     async connect(transport: Transport): Promise<void> {
+        // Check environment variable and wrap transport for debugging if needed
+        const debugBasePath = process.env.MCP_DEBUG_TRANSPORT;
+        if (debugBasePath) {
+            const role: 'client' | 'server' | 'unknown' =
+                this.constructor.name === 'Client' ? 'client' : this.constructor.name === 'Server' ? 'server' : 'unknown';
+            if (!transport) {
+                throw new Error('Protocol.connect: transport parameter is required');
+            }
+            transport = new DebugTransport(transport, role, debugBasePath);
+        }
+
         this._transport = transport;
         const _onclose = this.transport?.onclose;
         this._transport.onclose = () => {
